@@ -1,6 +1,6 @@
-import bird
+import PyBoids
 
-env = bird.Environment()
-env.AddBoidArray(30)
-env.AddObservingMember()
-env.Start()
+env = PyBoids.Environment() # create environment
+env.AddBoidArray(70) # Add 30 bords
+env.AddObservingMember() # Add an observing bord
+env.Start() # Start the simulation

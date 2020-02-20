@@ -6,6 +6,9 @@ import weakref
 import gc
 import math
 from pygame.locals import *
+import numpy as np
+import vectormath as vm
+
 
 class Bird:
     pos_x = 0
@@ -15,7 +18,7 @@ class Bird:
     rotation = 0
     enhance_factor = 2
     sprite = pygame.image.load("bird.png")
-    sprite = pygame.transform.scale(sprite, (10, 13))
+    sprite = pygame.transform.scale(sprite, (10, 14))
     observing = False
     terminate = False
     neighbours = []
@@ -43,6 +46,12 @@ class Bird:
     #     ang = math.degrees(math.atan2(c[1]-b[1], c[0]-b[0]) - math.atan2(a[1]-b[1], a[0]-b[0]))
     #     return ang + 360 if ang < 0 else ang
 
+    def GetPosition(self):
+        return (int(self.pos_x), int(self.pos_y))
+
+    def GetVelocity(self):
+        return (self.speed_x, self.speed_y)
+
     def UpdateHeading(self):
         newx = self.pos_x + self.speed_x
         newy = (self.pos_y + self.speed_y) * -1
@@ -50,6 +59,9 @@ class Bird:
         self.rotation = angle + 180
         # print(angle)
         # self.rotation = 45 + 180
+
+    def GetSpritePosition(self):
+        return [int(self.pos_x) - 5, int(self.pos_y) - 7]
 
     def Update(self):
         if (self.observing):
@@ -74,8 +86,71 @@ class Bird:
 
             if (self.terminate):
                 break
-
+            if (len(self.neighbours) != 0):
+                # self.SteerTowards(self.GetFinalVel())
+                self.SetVelocity(self.GetFinalVel())
             time.sleep(0.01)
+
+    def SetVelocity(self, velocity):
+        try:
+            self.speed_x = velocity[0]
+            self.speed_y = velocity[1]
+        except:
+            # print("Failed to set velocity : " + str(id(self)))
+            None
+
+    def GetFinalVel(self):
+        separation = self.SteerTowards(self.AvoidCollision())
+        alignment = self.GetNeighbourVelAverage()
+        coheasion = self.SteerTowards(self.GetNeighbourPosAverage())
+        # mouse_pos = pygame.mouse.get_pos() * 1
+        # print(mouse_pos)
+
+        # if bool(pygame.mouse.get_focused()):
+        # if False:
+            # return np.average([separation, coheasion, mouse_pos], axis=0)
+        # else:
+        # return np.average([alignment, coheasion], axis=0)
+        return separation
+
+
+    def AvoidCollision(self):
+        array = []
+        for b in self.neighbours:
+            array.append(self.GetAvoidVel(b.GetPosition()))
+        return np.average(array, axis=0)
+
+    def GetAvoidVel(self, p):
+        escape_angle = 10
+        # print(p)
+        p = list(p)
+        cx = self.pos_x
+        cy = self.pos_y
+        s = math.sin(escape_angle)
+        c = math.cos(escape_angle)
+        # translate point back to origin:
+        p[0] -= cx
+        p[1] -= cy
+        # rotate point
+        xnew = p[0] * c - p[1] * s
+        ynew = p[0] * s + p[1] * c
+
+        # translate point back:
+        p[0] = int(xnew + cx)
+        p[1] = int(ynew + cy)
+        return p
+
+    def GetNeighbourPosAverage(self):
+        pos_list = []
+        for x in self.neighbours:
+            pos_list.append(x.GetPosition())
+        return np.average(pos_list, axis=0)
+
+    def GetNeighbourVelAverage(self):
+        vel_list = []
+        for x in self.neighbours:
+            vel_list.append(x.GetVelocity())
+        return np.average(vel_list, axis=0)
 
     def Terminate(self):
         #print("Killing self (" + str(id(self)) + ")")
@@ -87,12 +162,33 @@ class Bird:
         while True:     
             if (self.terminate):
                 break
-            print(
-                "\t Neighbour Count : " + str(len(self.neighbours)) + " X : " + str(self.pos_x) + " Y : " + str(self.pos_y), end='\r')
+            # print("\t Neighbour Count : " + str(len(self.neighbours)) + " X : " + str(self.pos_x) + " Y : " + str(self.pos_y), end='\r')
             time.sleep(0.25)
 
-    # def AvoidCollision(self): 
-        
+
+    
+    def GetEquationOfLine(self, points):
+        x_coords, y_coords = zip(*points)
+        A = np.vstack([x_coords,np.ones(len(x_coords))]).T
+        m, c = np.lstsq(A, y_coords)[0]
+        return (m,c)
+
+    def SteerTowards(self, target):
+        try:
+            traget = pygame.math.Vector2(target[0], target[1])
+            start  = pygame.math.Vector2(self.pos_x, self.pos_y)
+            delta = traget - start
+            distance = delta.length() 
+            direction = delta.normalize()
+            vel = direction * 1
+            # self.speed_x = vel[0]
+            # self.speed_y = vel[1]
+
+            return (vel[0], vel[1])
+        except:
+            # print("Normal Failed...")
+            None
+
 
 
 
@@ -162,24 +258,34 @@ class Environment:
                     if event.type == pygame.QUIT:
                         self.done = True
                         self.Running = False
-                        print("")
                         print("Killing " + str(len(self.birdArray)) + " bird threads...")
                         for thread in self.birdArray:
                             thread.Terminate()
 
+                # Clear the screen
                 self.screen.fill((0, 0, 0))
 
+                # Update ship neighbours
                 for bird_c in self.birdArray:
-                    # bird_c = self.Recall(birdId)
-                    surf = pygame.transform.rotate(bird_c.sprite, bird_c.rotation)
-                    self.screen.blit(surf, (int(bird_c.pos_x), int(bird_c.pos_y)))
-
                     neighbours = []
                     for bird_n in self.birdArray:
                         if (bird_n != bird_c):
-                            if (self.CalculateDistance((bird_c.pos_x, bird_c.pos_y), (bird_n.pos_x, bird_n.pos_y)) < 50):
+                            if (self.CalculateDistance((bird_c.pos_x, bird_c.pos_y), (bird_n.pos_x, bird_n.pos_y)) < 70):
                                 neighbours.append(bird_n)
+
+                                # if the current bird is an observing bird, draw the ranges
+                                if (bird_c.observing):
+                                    pygame.draw.line(self.screen, (0, 100, 0), bird_n.GetPosition(), bird_c.GetPosition(), 1)
+
+                    # assign the neighbour list of the current bird
                     bird_c.neighbours = neighbours
+
+                    # Draw the bords
+                    surf = pygame.transform.rotate(bird_c.sprite, bird_c.rotation)
+                    if (bird_c.observing):
+                        pygame.draw.circle(self.screen, (100, 0, 0), bird_c.GetPosition(), 70, 1)   
+                    self.screen.blit(surf, bird_c.GetSpritePosition())
+
                 
                 pygame.display.flip()
                 self.clock.tick(30)

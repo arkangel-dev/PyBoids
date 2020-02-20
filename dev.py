@@ -1,23 +1,9 @@
 import math
 from math import sqrt
 from math import acos
-import curses
+import numpy as np
 
-velx = 1
-vely = 0
+vela = np.array([[5,2], [3,3]])
 
-posx = 0
-posy = 0
 
-newx = posx + velx
-newy = posy + vely
-
-stdscr = curses.initscr()
-
-def report_progress():
-    """progress: 0-10"""
-    stdscr.addstr(0, 0, "Moving file: ")
-    stdscr.addstr(1, 0, "Total progress: ")
-    stdscr.refresh()
-
-report_progress()
+print(np.mean(vela, axis=0)[0])

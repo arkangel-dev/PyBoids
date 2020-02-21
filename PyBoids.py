@@ -21,11 +21,17 @@ class Bird:
     sprite = pygame.transform.scale(sprite, (10, 14))
     observing = False
     terminate = False
+    visibility_range = 30
     neighbours = []
 
-    def __init__(self, observing = False):
-        self.pos_x = random.randint(0, 700)
-        self.pos_y = random.randint(0, 700)
+    resx = 0
+    resy = 0
+
+    def __init__(self, resolution, observing = False):
+        self.pos_x = random.randint(0, resolution[0])
+        self.pos_y = random.randint(0, resolution[1])
+        self.resx = resolution[0]
+        self.resy = resolution[1]
         self.speed_x = self.InitVelocity()
         self.speed_y = self.InitVelocity()  
 
@@ -72,14 +78,14 @@ class Bird:
             self.pos_x += self.speed_x * self.enhance_factor
             self.pos_y += self.speed_y * self.enhance_factor
 
-            if (self.pos_x > 700):
+            if (self.pos_x > self.resx):
                 self.pos_x = 0
             elif (self.pos_x < 0):
-                self.pos_x = 700
-            if (self.pos_y > 700):
+                self.pos_x = self.resx
+            if (self.pos_y > self.resy):
                 self.pos_y = 0
             elif (self.pos_y < 0):
-                self.pos_y = 700
+                self.pos_y = self.resy
 
             self.UpdateHeading()
             # print(str(len(self.neighbours)))
@@ -103,15 +109,15 @@ class Bird:
         separation = self.SteerTowards(self.AvoidCollision())
         alignment = self.GetNeighbourVelAverage()
         coheasion = self.SteerTowards(self.GetNeighbourPosAverage())
-        # mouse_pos = pygame.mouse.get_pos() * 1
-        # print(mouse_pos)
+        mouse = self.SteerTowards( pygame.mouse.get_pos())
 
         # if bool(pygame.mouse.get_focused()):
-        # if False:
-            # return np.average([separation, coheasion, mouse_pos], axis=0)
+        #     return np.average([alignment, mouse], axis=0)
         # else:
-        # return np.average([alignment, coheasion], axis=0)
-        return separation
+        #     return alignment
+
+        # return np.sum([coheasion, alignment], axis=0)
+        return alignment
 
 
     def AvoidCollision(self):
@@ -157,12 +163,12 @@ class Bird:
         self.terminate = True
 
     def StartTelemetry(self):
-        print("") 
-        print("[+] Telemetry for observing bird: ")
+        # print("") 
+        # print("[+] Telemetry for observing bird: ")
         while True:     
             if (self.terminate):
                 break
-            # print("\t Neighbour Count : " + str(len(self.neighbours)) + " X : " + str(self.pos_x) + " Y : " + str(self.pos_y), end='\r')
+            # print("\t Neighbour Count : " + str(len(self.neighbours)) + " X : " + str(int(self.pos_x)) + " Y : " + str(int(self.pos_y)) + " VX : " + str(self.speed_x) + " VY : " + str(self.speed_y), end='\r')
             time.sleep(0.25)
 
 
@@ -189,13 +195,10 @@ class Bird:
             # print("Normal Failed...")
             None
 
-
-
-
 class Environment:
     pygame.init()
     pygame.font.init()
-    screen = pygame.display.set_mode((700, 700))
+    screen = pygame.display.set_mode((1000, 700))
     # birdList = []
     # birdArray = weakref.WeakValueDictionary()
     birdArray = []
@@ -203,15 +206,20 @@ class Environment:
     boid_mem = pygame.image.load("bird.png")
     boid_mem = pygame.transform.scale(boid_mem, (10, 13))
     threadList = []
+
+    resx = 0
+    resy = 0
+
     done = False
     Running = False
     ObserverAdded = False
 
     def AddBoidArray(self, count):
         print("Creating " + str(count) + " bird threads...")
-        if not self.Running:
+        # if not self.Running:
+        if True:
             for x in range(0, count):
-                bird = Bird()
+                bird = Bird((self.resx, self.resy))
                 oid = id(bird)
                 # self.Remember(bird)
                 # self.birdList.append(bird)
@@ -230,7 +238,7 @@ class Environment:
     def AddObservingMember(self):
         if not self.Running:
             if not (self.ObserverAdded):
-                bird = Bird()
+                bird = Bird((self.resx, self.resy))
                 bird.observing = True
                 bird.Refresh()
                 oid = id(bird)
@@ -250,6 +258,25 @@ class Environment:
         else:
             print("Cannot add members while simulation is running...")
 
+    def StartConsole(self):
+        console_thread = threading.Thread(target=self.EnterConsole)
+        console_thread.start()
+
+    def EnterConsole(self):
+        print("")
+        print("[!] Console Active...")
+        while self.Running:
+            in_string = input("PyBoids:~ ")
+            in_string = in_string.split(" ")
+            first_comm = in_string[0]
+
+            try:
+                if (first_comm.__eq__("add")):
+                    self.AddBoidArray(int(in_string[1]))
+                else:
+                    print("Invalid Command")
+            except:
+                print("Malformed Command")
 
     def Start(self):
             self.Running = True
@@ -270,7 +297,7 @@ class Environment:
                     neighbours = []
                     for bird_n in self.birdArray:
                         if (bird_n != bird_c):
-                            if (self.CalculateDistance((bird_c.pos_x, bird_c.pos_y), (bird_n.pos_x, bird_n.pos_y)) < 70):
+                            if (self.CalculateDistance((bird_c.pos_x, bird_c.pos_y), (bird_n.pos_x, bird_n.pos_y)) < bird_n.visibility_range):
                                 neighbours.append(bird_n)
 
                                 # if the current bird is an observing bird, draw the ranges
@@ -283,7 +310,7 @@ class Environment:
                     # Draw the bords
                     surf = pygame.transform.rotate(bird_c.sprite, bird_c.rotation)
                     if (bird_c.observing):
-                        pygame.draw.circle(self.screen, (100, 0, 0), bird_c.GetPosition(), 70, 1)   
+                        pygame.draw.circle(self.screen, (100, 0, 0), bird_c.GetPosition(), bird_n.visibility_range, 1)   
                     self.screen.blit(surf, bird_c.GetSpritePosition())
 
                 
@@ -304,6 +331,11 @@ class Environment:
         # self.birdArray[oid] = obj
         # return oid
         self.birdArray.append(obj)
+
+    def __init__(self, resolution):
+        self.resx = resolution[0]
+        self.resy = resolution[1]
+        self.screen = pygame.display.set_mode((self.resx, self.resy))
 
     # def Recall(self, oid):
     #     for obj in gc.get_objects():
